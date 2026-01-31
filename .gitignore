@@ -1,0 +1,19 @@
+# Node
+node_modules/
+npm-debug.log
+
+# Java
+target/
+*.log
+
+# IDE
+.idea/
+.vSCode/
+*.iml
+
+# OS
+.DS_Store
+
+# Env
+.env
+
