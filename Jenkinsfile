@@ -28,39 +28,36 @@ pipeline {
             when { branch 'develop' }
             steps {
                 sh '''
-                set -e
-                mvn -v
-                node -v
-                npm -v
-                docker -v
-                oc version
+                  mvn -v
+                  node -v
+                  npm -v
+                  docker -v
+                  oc version --client
                 '''
             }
         }
 
-        stage('Build Spring Boot Services') {
+        stage('Build Backend Services') {
             when { branch 'develop' }
             steps {
                 sh '''
-                set -e
-                for svc in apiservice authservice userservice
-                do
-                  echo "Building $svc"
-                  cd services/$svc
-                  mvn clean package -DskipTests
-                  cd -
-                done
+                  for svc in apiservice authservice userservice
+                  do
+                    echo "===== Building $svc ====="
+                    cd services/$svc
+                    mvn clean package -DskipTests
+                    cd -
+                  done
                 '''
             }
         }
 
-        stage('Prepare Frontend (Express)') {
+        stage('Prepare Frontend') {
             when { branch 'develop' }
             steps {
                 sh '''
-                set -e
-                cd services/frontend
-                npm install
+                  cd services/frontend
+                  npm install
                 '''
             }
         }
@@ -68,13 +65,17 @@ pipeline {
         stage('Docker Build Images') {
             when { branch 'develop' }
             steps {
-                sh '''
-                set -e
-                docker build -t ${DOCKER_REPO}/nextgen-apiservice:${IMAGE_TAG} services/apiservice
-                docker build -t ${DOCKER_REPO}/nextgen-authservice:${IMAGE_TAG} services/authservice
-                docker build -t ${DOCKER_REPO}/nextgen-userservice:${IMAGE_TAG} services/userservice
-                docker build -t ${DOCKER_REPO}/nextgen-ui:${IMAGE_TAG} services/frontend
-                '''
+                script {
+                    def services = ["apiservice", "authservice", "userservice", "frontend"]
+                    for (svc in services) {
+                        sh """
+                          echo "===== Docker build: ${svc} ====="
+                          docker build \
+                            -t ${DOCKER_REPO}/nextgen-${svc}:${IMAGE_TAG} \
+                            services/${svc}
+                        """
+                    }
+                }
             }
         }
 
@@ -87,19 +88,18 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                    set -e
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                    docker push ${DOCKER_REPO}/nextgen-apiservice:${IMAGE_TAG}
-                    docker push ${DOCKER_REPO}/nextgen-authservice:${IMAGE_TAG}
-                    docker push ${DOCKER_REPO}/nextgen-userservice:${IMAGE_TAG}
-                    docker push ${DOCKER_REPO}/nextgen-ui:${IMAGE_TAG}
+                      for svc in apiservice authservice userservice frontend
+                      do
+                        docker push ${DOCKER_REPO}/nextgen-$svc:${IMAGE_TAG}
+                      done
                     '''
                 }
             }
         }
 
-        stage('Deploy to OpenShift') {
+        stage('Deploy to OpenShift (FORCE ROLLOUT)') {
             when { branch 'develop' }
             steps {
                 withCredentials([string(
@@ -107,19 +107,24 @@ pipeline {
                     variable: 'OCP_TOKEN'
                 )]) {
                     sh '''
-                    set -e
-                    oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
-                    oc project $OCP_NAMESPACE
+                      oc login --token=$OCP_TOKEN \
+                        --server=$OCP_SERVER \
+                        --insecure-skip-tls-verify=true
 
-                    oc apply -f services/apiservice/openshift.yaml
-                    oc apply -f services/authservice/openshift.yaml
-                    oc apply -f services/userservice/openshift.yaml
-                    oc apply -f services/frontend/openshift.yaml
+                      oc project $OCP_NAMESPACE
 
-                    oc rollout restart deployment/apiservice
-                    oc rollout restart deployment/authservice
-                    oc rollout restart deployment/userservice
-                    oc rollout restart deployment/nextgen-ui
+                      echo "===== Applying manifests ====="
+                      oc apply -f services/apiservice/openshift.yaml
+                      oc apply -f services/authservice/openshift.yaml
+                      oc apply -f services/userservice/openshift.yaml
+                      oc apply -f services/frontend/openshift.yaml
+
+                      echo "===== FORCEFUL ROLLOUT (new revision guaranteed) ====="
+                      for d in apiservice authservice userservice nextgen-ui
+                      do
+                        oc patch deployment $d \
+                          -p "{\"spec\":{\"template\":{\"metadata\":{\"annotations\":{\"jenkins-build\":\"${BUILD_NUMBER}\"}}}}}"
+                      done
                     '''
                 }
             }
@@ -128,10 +133,13 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD SUCCESS: All services built, pushed, and deployed"
+            echo "✅ CI/CD SUCCESS: Build → Push → Deploy → Force Rollout completed"
         }
         failure {
             echo "❌ CI/CD FAILED: Check Jenkins logs"
+        }
+        always {
+            sh 'docker logout || true'
         }
     }
 }
