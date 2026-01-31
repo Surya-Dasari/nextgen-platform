@@ -1,59 +1,47 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: userservice
+  name: authservice
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: userservice
+      app: authservice
   template:
     metadata:
       labels:
-        app: userservice
+        app: authservice
     spec:
       containers:
-        - name: userservice
-          image: docker.io/suryadasari31/nextgen-userservice:latest
+        - name: authservice
+          image: docker.io/suryadasari31/nextgen-authservice:latest
           imagePullPolicy: Always
           ports:
-            - containerPort: 9002
+            - containerPort: 9001
           env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/nextgendb
-
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_USER
-
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_PASSWORD
+            - name: USERSERVICE_URL
+              value: http://userservice:9002
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: userservice
+  name: authservice
 spec:
   selector:
-    app: userservice
+    app: authservice
   ports:
     - name: http
-      port: 9002
-      targetPort: 9002
+      port: 9001
+      targetPort: 9001
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: userservice
+  name: authservice
 spec:
   to:
     kind: Service
-    name: userservice
+    name: authservice
   port:
     targetPort: http
   tls:
