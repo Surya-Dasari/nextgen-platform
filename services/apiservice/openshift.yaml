@@ -18,6 +18,11 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 9000
+          env:
+            - name: AUTH_SERVICE_URL
+              value: http://authservice:9001
+            - name: USER_SERVICE_URL
+              value: http://userservice:9002
 ---
 apiVersion: v1
 kind: Service
