@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: userservice
+  labels:
+    app: userservice
 spec:
   replicas: 1
   selector:
@@ -20,30 +22,11 @@ spec:
           ports:
             - containerPort: 9002
 
-          # ✅ Explicit env mapping (NO envFrom magic)
-          env:
-            - name: SPRING_DATASOURCE_URL
-              value: jdbc:postgresql://postgres:5432/nextgendb
-
-            - name: SPRING_DATASOURCE_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_USER
-
-            - name: SPRING_DATASOURCE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: postgres-secret
-                  key: POSTGRES_PASSWORD
-
-          # ✅ Health checks (safe values)
-          readinessProbe:
-            httpGet:
-              path: /actuator/health
-              port: 9002
-            initialDelaySeconds: 30
-            periodSeconds: 10
+          envFrom:
+            - configMapRef:
+                name: userservice-config
+            - secretRef:
+                name: userservice-db-secret
 
           livenessProbe:
             httpGet:
@@ -51,6 +34,13 @@ spec:
               port: 9002
             initialDelaySeconds: 60
             periodSeconds: 20
+
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9002
+            initialDelaySeconds: 30
+            periodSeconds: 10
 
 ---
 apiVersion: v1

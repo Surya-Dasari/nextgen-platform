@@ -2,12 +2,10 @@ pipeline {
     agent any
 
     environment {
-        MAVEN_OPTS    = "-Dmaven.repo.local=.m2/repository"
         DOCKER_REPO   = "docker.io/suryadasari31"
-        IMAGE_TAG     = "latest"
-
-        OCP_SERVER    = "https://api.rm2.thpm.p1.openshiftapps.com:6443"
-        OCP_NAMESPACE = "suryadasari31-dev"
+        IMAGE_TAG    = "${BUILD_NUMBER}"
+        OCP_SERVER   = "https://api.rm2.thpm.p1.openshiftapps.com:6443"
+        OCP_PROJECT  = "suryadasari31-dev"
     }
 
     options {
@@ -17,106 +15,47 @@ pipeline {
 
     stages {
 
-        /* =======================
-           CHECKOUT
-           ======================= */
         stage('Checkout') {
-            when { branch 'develop' }
             steps {
                 checkout scm
             }
         }
 
-        /* =======================
-           VERIFY TOOLS
-           ======================= */
-        stage('Verify Tools') {
+        stage('Build Backend') {
             steps {
                 sh '''
-                  mvn -v
-                  node -v
-                  npm -v
-                  docker -v
-                  oc version --client
+                for svc in apiservice authservice userservice
+                do
+                  cd services/$svc
+                  mvn clean package -DskipTests
+                  cd -
+                done
                 '''
             }
         }
 
-        /* =======================
-           CLEAN OPENSHIFT
-           ======================= */
-        stage('Clean OpenShift Namespace') {
-            steps {
-                withCredentials([string(
-                    credentialsId: 'openshift-token',
-                    variable: 'OCP_TOKEN'
-                )]) {
-                    sh '''
-                      echo "===== OpenShift Login ====="
-                      oc login --token=$OCP_TOKEN \
-                        --server=$OCP_SERVER \
-                        --insecure-skip-tls-verify=true
-
-                      oc project $OCP_NAMESPACE
-
-                      echo "===== Cleaning existing resources ====="
-                      oc delete deployment apiservice authservice userservice nextgen-ui --ignore-not-found
-                      oc delete service apiservice authservice userservice nextgen-ui --ignore-not-found
-                      oc delete route apiservice authservice userservice nextgen-ui --ignore-not-found
-
-                      sleep 10
-                    '''
-                }
-            }
-        }
-
-        /* =======================
-           BUILD BACKEND
-           ======================= */
-        stage('Build Spring Boot Services') {
+        stage('Build Frontend') {
             steps {
                 sh '''
-                  for svc in apiservice authservice userservice
-                  do
-                    echo "===== Building $svc ====="
-                    cd services/$svc
-                    mvn clean package -DskipTests
-                    cd -
-                  done
+                cd services/frontend
+                npm install
+                npm run build || true
                 '''
             }
         }
 
-        /* =======================
-           FRONTEND
-           ======================= */
-        stage('Prepare Frontend') {
+        stage('Docker Build') {
             steps {
                 sh '''
-                  cd services/frontend
-                  npm install
+                for svc in apiservice authservice userservice frontend
+                do
+                  docker build -t $DOCKER_REPO/nextgen-$svc:$IMAGE_TAG services/$svc
+                done
                 '''
             }
         }
 
-        /* =======================
-           DOCKER BUILD
-           ======================= */
-        stage('Docker Build Images') {
-            steps {
-                sh '''
-                  docker build -t docker.io/suryadasari31/nextgen-apiservice:latest services/apiservice
-                  docker build -t docker.io/suryadasari31/nextgen-authservice:latest services/authservice
-                  docker build -t docker.io/suryadasari31/nextgen-userservice:latest services/userservice
-                  docker build -t docker.io/suryadasari31/nextgen-frontend:latest services/frontend
-                '''
-            }
-        }
-
-        /* =======================
-           DOCKER PUSH
-           ======================= */
-        stage('Docker Push Images') {
+        stage('Docker Push') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -124,20 +63,16 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
-                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-
-                      docker push docker.io/suryadasari31/nextgen-apiservice:latest
-                      docker push docker.io/suryadasari31/nextgen-authservice:latest
-                      docker push docker.io/suryadasari31/nextgen-userservice:latest
-                      docker push docker.io/suryadasari31/nextgen-frontend:latest
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    for svc in apiservice authservice userservice frontend
+                    do
+                      docker push $DOCKER_REPO/nextgen-$svc:$IMAGE_TAG
+                    done
                     '''
                 }
             }
         }
 
-        /* =======================
-           DEPLOY + FORCE ROLLOUT
-           ======================= */
         stage('Deploy to OpenShift') {
             steps {
                 withCredentials([string(
@@ -145,30 +80,19 @@ pipeline {
                     variable: 'OCP_TOKEN'
                 )]) {
                     sh '''
-                      oc login --token=$OCP_TOKEN \
-                        --server=$OCP_SERVER \
-                        --insecure-skip-tls-verify=true
+                    oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
+                    oc project $OCP_PROJECT
 
-                      oc project $OCP_NAMESPACE
+                    oc apply -f services/postgres/
+                    oc apply -f services/apiservice/
+                    oc apply -f services/authservice/
+                    oc apply -f services/userservice/
+                    oc apply -f services/frontend/
 
-                      echo "===== Applying manifests ====="
-                      oc apply -f services/apiservice/openshift.yaml
-                      oc apply -f services/authservice/openshift.yaml
-                      oc apply -f services/userservice/openshift.yaml
-                      oc apply -f services/frontend/openshift.yaml
-
-                      echo "===== Force rollout (new revision) ====="
-                      oc patch deployment apiservice \
-                        -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"jenkins-build\\":\\"$BUILD_NUMBER\\"}}}}}"
-
-                      oc patch deployment authservice \
-                        -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"jenkins-build\\":\\"$BUILD_NUMBER\\"}}}}}"
-
-                      oc patch deployment userservice \
-                        -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"jenkins-build\\":\\"$BUILD_NUMBER\\"}}}}}"
-
-                      oc patch deployment nextgen-ui \
-                        -p "{\\"spec\\":{\\"template\\":{\\"metadata\\":{\\"annotations\\":{\\"jenkins-build\\":\\"$BUILD_NUMBER\\"}}}}}"
+                    oc rollout status deployment/apiservice --timeout=120s
+                    oc rollout status deployment/authservice --timeout=120s
+                    oc rollout status deployment/userservice --timeout=120s
+                    oc rollout status deployment/nextgen-ui --timeout=120s
                     '''
                 }
             }
@@ -177,13 +101,10 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD SUCCESS: Clean deploy + forced rollout completed"
+            echo "✅ CI/CD SUCCESS"
         }
         failure {
-            echo "❌ CI/CD FAILED: Check Jenkins logs"
-        }
-        always {
-            sh 'docker logout || true'
+            echo "❌ CI/CD FAILED"
         }
     }
 }
