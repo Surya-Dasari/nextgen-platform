@@ -13,10 +13,11 @@ spec:
         app: authservice
     spec:
       containers:
-      - name: authservice
-        image: docker.io/suryadasari31/nextgen-authservice:3
-        ports:
-        - containerPort: 9001
+        - name: authservice
+          image: docker.io/suryadasari31/nextgen-authservice:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9001
 ---
 apiVersion: v1
 kind: Service
@@ -26,9 +27,9 @@ spec:
   selector:
     app: authservice
   ports:
-  - name: http
-    port: 9001
-    targetPort: 9001
+    - name: http
+      port: 9001
+      targetPort: 9001
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -42,3 +43,4 @@ spec:
     targetPort: http
   tls:
     termination: edge
+

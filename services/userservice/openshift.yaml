@@ -13,10 +13,11 @@ spec:
         app: userservice
     spec:
       containers:
-      - name: userservice
-        image: docker.io/suryadasari31/nextgen-userservice:3
-        ports:
-        - containerPort: 9002
+        - name: userservice
+          image: docker.io/suryadasari31/nextgen-userservice:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9002
 ---
 apiVersion: v1
 kind: Service
@@ -26,9 +27,9 @@ spec:
   selector:
     app: userservice
   ports:
-  - name: http
-    port: 9002
-    targetPort: 9002
+    - name: http
+      port: 9002
+      targetPort: 9002
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -42,3 +43,4 @@ spec:
     targetPort: http
   tls:
     termination: edge
+

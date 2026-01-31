@@ -13,10 +13,11 @@ spec:
         app: apiservice
     spec:
       containers:
-      - name: apiservice
-        image: docker.io/suryadasari31/nextgen-apiservice:3
-        ports:
-        - containerPort: 9000
+        - name: apiservice
+          image: docker.io/suryadasari31/nextgen-apiservice:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 9000
 ---
 apiVersion: v1
 kind: Service
@@ -26,9 +27,9 @@ spec:
   selector:
     app: apiservice
   ports:
-  - name: http
-    port: 9000
-    targetPort: 9000
+    - name: http
+      port: 9000
+      targetPort: 9000
 ---
 apiVersion: route.openshift.io/v1
 kind: Route
@@ -42,3 +43,4 @@ spec:
     targetPort: http
   tls:
     termination: edge
+
