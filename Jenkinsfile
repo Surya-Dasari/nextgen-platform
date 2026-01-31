@@ -25,7 +25,6 @@ pipeline {
         }
 
         stage('Verify Tools') {
-            when { branch 'develop' }
             steps {
                 sh '''
                   mvn -v
@@ -37,8 +36,39 @@ pipeline {
             }
         }
 
-        stage('Build Backend Services') {
-            when { branch 'develop' }
+        /* =======================
+           CLEAN OPENSHIFT FIRST
+           ======================= */
+        stage('Clean OpenShift Namespace') {
+            steps {
+                withCredentials([string(
+                    credentialsId: 'openshift-token',
+                    variable: 'OCP_TOKEN'
+                )]) {
+                    sh '''
+                      echo "===== Logging into OpenShift ====="
+                      oc login --token=$OCP_TOKEN \
+                        --server=$OCP_SERVER \
+                        --insecure-skip-tls-verify=true
+
+                      oc project $OCP_NAMESPACE
+
+                      echo "===== Deleting existing resources ====="
+                      oc delete deployment apiservice authservice userservice nextgen-ui --ignore-not-found
+                      oc delete service apiservice authservice userservice nextgen-ui --ignore-not-found
+                      oc delete route apiservice authservice userservice nextgen-ui --ignore-not-found
+
+                      echo "===== Waiting for cleanup ====="
+                      sleep 10
+                    '''
+                }
+            }
+        }
+
+        /* =======================
+           BUILD BACKEND
+           ======================= */
+        stage('Build Spring Boot Services') {
             steps {
                 sh '''
                   for svc in apiservice authservice userservice
@@ -52,8 +82,10 @@ pipeline {
             }
         }
 
+        /* =======================
+           FRONTEND
+           ======================= */
         stage('Prepare Frontend') {
-            when { branch 'develop' }
             steps {
                 sh '''
                   cd services/frontend
@@ -62,8 +94,10 @@ pipeline {
             }
         }
 
+        /* =======================
+           DOCKER BUILD
+           ======================= */
         stage('Docker Build Images') {
-            when { branch 'develop' }
             steps {
                 script {
                     def services = ["apiservice", "authservice", "userservice", "frontend"]
@@ -79,8 +113,10 @@ pipeline {
             }
         }
 
+        /* =======================
+           DOCKER PUSH
+           ======================= */
         stage('Docker Push Images') {
-            when { branch 'develop' }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -99,8 +135,10 @@ pipeline {
             }
         }
 
-        stage('Deploy to OpenShift (FORCE ROLLOUT)') {
-            when { branch 'develop' }
+        /* =======================
+           DEPLOY TO OPENSHIFT
+           ======================= */
+        stage('Deploy to OpenShift (Fresh)') {
             steps {
                 withCredentials([string(
                     credentialsId: 'openshift-token',
@@ -119,7 +157,7 @@ pipeline {
                       oc apply -f services/userservice/openshift.yaml
                       oc apply -f services/frontend/openshift.yaml
 
-                      echo "===== FORCEFUL ROLLOUT (new revision guaranteed) ====="
+                      echo "===== Force rollout (new revision) ====="
                       for d in apiservice authservice userservice nextgen-ui
                       do
                         oc patch deployment $d \
@@ -133,7 +171,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD SUCCESS: Build → Push → Deploy → Force Rollout completed"
+            echo "✅ CLEAN CI/CD SUCCESS: Fresh deploy completed"
         }
         failure {
             echo "❌ CI/CD FAILED: Check Jenkins logs"
