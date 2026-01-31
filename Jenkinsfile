@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         MAVEN_OPTS     = "-Dmaven.repo.local=.m2/repository"
-        DOCKER_REPO    = "docker.io/<YOUR_DOCKERHUB_USERNAME>"
+        DOCKER_REPO    = "docker.io/suryadasari31"
         IMAGE_TAG      = "${BUILD_NUMBER}"
     }
 
