@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     environment {
-        NEXUS_URL        = "http://localhost:8082"
-        NEXUS_MAVEN_REPO = "nextgen-maven-releases"
-        MAVEN_OPTS       = "-Dmaven.repo.local=.m2/repository"
+        MAVEN_OPTS = "-Dmaven.repo.local=.m2/repository"
     }
 
     options {
@@ -25,6 +23,7 @@ pipeline {
             when { branch 'develop' }
             steps {
                 sh '''
+                echo "=== Tool Versions ==="
                 mvn -v
                 node -v
                 npm -v
@@ -32,13 +31,13 @@ pipeline {
             }
         }
 
-        stage('Build Backend Services') {
+        stage('Build Spring Boot Services') {
             when { branch 'develop' }
             steps {
                 sh '''
                 for service in apiservice authservice userservice
                 do
-                  echo "Building $service"
+                  echo "=== Building $service ==="
                   cd services/$service
                   mvn clean package -DskipTests
                   cd -
@@ -47,13 +46,13 @@ pipeline {
             }
         }
 
-        stage('Build Frontend') {
+        stage('Prepare Frontend (Express)') {
             when { branch 'develop' }
             steps {
                 sh '''
+                echo "=== Installing frontend dependencies ==="
                 cd services/frontend
                 npm install
-                npm run build
                 '''
             }
         }
@@ -61,10 +60,10 @@ pipeline {
 
     post {
         success {
-            echo "CI completed successfully"
+            echo "✅ CI SUCCESS: Backend built, frontend dependencies installed"
         }
         failure {
-            echo "CI failed — check logs"
+            echo "❌ CI FAILED: Check logs above"
         }
     }
 }
