@@ -2,11 +2,12 @@ pipeline {
     agent any
 
     environment {
-        MAVEN_OPTS      = "-Dmaven.repo.local=.m2/repository"
-        DOCKER_REPO     = "docker.io/suryadasari31"
-        IMAGE_TAG       = "latest"
-        OCP_SERVER      = "https://api.rm2.thpm.p1.openshiftapps.com:6443"
-        OCP_NAMESPACE   = "suryadasari31-dev"
+        MAVEN_OPTS    = "-Dmaven.repo.local=.m2/repository"
+        DOCKER_REPO   = "docker.io/suryadasari31"
+        IMAGE_TAG     = "latest"
+
+        OCP_SERVER    = "https://api.rm2.thpm.p1.openshiftapps.com:6443"
+        OCP_NAMESPACE = "suryadasari31-dev"
     }
 
     options {
@@ -27,10 +28,12 @@ pipeline {
             when { branch 'develop' }
             steps {
                 sh '''
+                set -e
                 mvn -v
                 node -v
                 npm -v
                 docker -v
+                oc version
                 '''
             }
         }
@@ -39,6 +42,7 @@ pipeline {
             when { branch 'develop' }
             steps {
                 sh '''
+                set -e
                 for svc in apiservice authservice userservice
                 do
                   echo "Building $svc"
@@ -54,6 +58,7 @@ pipeline {
             when { branch 'develop' }
             steps {
                 sh '''
+                set -e
                 cd services/frontend
                 npm install
                 '''
@@ -63,22 +68,13 @@ pipeline {
         stage('Docker Build Images') {
             when { branch 'develop' }
             steps {
-                script {
-                    def services = [
-                        "apiservice",
-                        "authservice",
-                        "userservice",
-                        "frontend"
-                    ]
-
-                    for (svc in services) {
-                        sh """
-                        docker build \
-                          -t ${DOCKER_REPO}/nextgen-${svc}:${IMAGE_TAG} \
-                          services/${svc}
-                        """
-                    }
-                }
+                sh '''
+                set -e
+                docker build -t ${DOCKER_REPO}/nextgen-apiservice:${IMAGE_TAG} services/apiservice
+                docker build -t ${DOCKER_REPO}/nextgen-authservice:${IMAGE_TAG} services/authservice
+                docker build -t ${DOCKER_REPO}/nextgen-userservice:${IMAGE_TAG} services/userservice
+                docker build -t ${DOCKER_REPO}/nextgen-ui:${IMAGE_TAG} services/frontend
+                '''
             }
         }
 
@@ -91,12 +87,13 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh '''
+                    set -e
                     echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
 
-                    for svc in apiservice authservice userservice frontend
-                    do
-                      docker push ${DOCKER_REPO}/nextgen-$svc:${IMAGE_TAG}
-                    done
+                    docker push ${DOCKER_REPO}/nextgen-apiservice:${IMAGE_TAG}
+                    docker push ${DOCKER_REPO}/nextgen-authservice:${IMAGE_TAG}
+                    docker push ${DOCKER_REPO}/nextgen-userservice:${IMAGE_TAG}
+                    docker push ${DOCKER_REPO}/nextgen-ui:${IMAGE_TAG}
                     '''
                 }
             }
@@ -110,6 +107,7 @@ pipeline {
                     variable: 'OCP_TOKEN'
                 )]) {
                     sh '''
+                    set -e
                     oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
                     oc project $OCP_NAMESPACE
 
@@ -130,10 +128,11 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD SUCCESS: Apps deployed to OpenShift"
+            echo "✅ CI/CD SUCCESS: All services built, pushed, and deployed"
         }
         failure {
-            echo "❌ CI/CD FAILED: Check logs"
+            echo "❌ CI/CD FAILED: Check Jenkins logs"
         }
     }
 }
+
