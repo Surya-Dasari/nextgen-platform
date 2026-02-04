@@ -83,7 +83,7 @@ pipeline {
                     oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
                     oc project $OCP_PROJECT
 
-                    oc apply -f services/postgres/openshift.yaml
+                    oc apply -f services/postgres/
                     oc apply -f services/apiservice/openshift.yaml
                     oc apply -f services/authservice/openshift.yaml
                     oc apply -f services/userservice/openshift.yaml
