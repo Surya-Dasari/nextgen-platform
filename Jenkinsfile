@@ -83,11 +83,12 @@ pipeline {
                     oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
                     oc project $OCP_PROJECT
 
-                    oc apply -f services/postgres/
-                    oc apply -f services/apiservice/
-                    oc apply -f services/authservice/
-                    oc apply -f services/userservice/
-                    oc apply -f services/frontend/
+                    oc apply -f services/postgres/openshift.yaml
+                    oc apply -f services/apiservice/openshift.yaml
+                    oc apply -f services/authservice/openshift.yaml
+                    oc apply -f services/userservice/openshift.yaml
+                    oc apply -f services/frontend/openshift.yaml
+
 
                     oc rollout status deployment/apiservice --timeout=120s
                     oc rollout status deployment/authservice --timeout=120s
