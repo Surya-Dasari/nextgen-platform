@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REPO   = "docker.io/suryadasari31"
+        DOCKER_REPO  = "docker.io/suryadasari31"
         IMAGE_TAG    = "${BUILD_NUMBER}"
         OCP_SERVER   = "https://api.rm2.thpm.p1.openshiftapps.com:6443"
         OCP_PROJECT  = "suryadasari31-dev"
@@ -73,6 +73,36 @@ pipeline {
             }
         }
 
+        stage('Prepare Secrets (Idempotent)') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'openshift-token', variable: 'OCP_TOKEN'),
+                    string(credentialsId: 'pg-db-user', variable: 'DB_USER'),
+                    string(credentialsId: 'pg-db-password', variable: 'DB_PASS'),
+                    string(credentialsId: 'pg-db-name', variable: 'DB_NAME')
+                ]) {
+                    sh '''
+                    oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
+                    oc project $OCP_PROJECT
+
+                    # PostgreSQL secret
+                    oc get secret postgres-secret || \
+                    oc create secret generic postgres-secret \
+                      --from-literal=POSTGRES_USER=$DB_USER \
+                      --from-literal=POSTGRES_PASSWORD=$DB_PASS \
+                      --from-literal=POSTGRES_DB=$DB_NAME
+
+                    # Userservice DB secret
+                    oc get secret userservice-db-secret || \
+                    oc create secret generic userservice-db-secret \
+                      --from-literal=SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/$DB_NAME \
+                      --from-literal=SPRING_DATASOURCE_USERNAME=$DB_USER \
+                      --from-literal=SPRING_DATASOURCE_PASSWORD=$DB_PASS
+                    '''
+                }
+            }
+        }
+
         stage('Deploy to OpenShift') {
             steps {
                 withCredentials([string(
@@ -83,22 +113,12 @@ pipeline {
                     oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
                     oc project $OCP_PROJECT
 
-                    # Apply infra
                     oc apply -f services/postgres/
-
-                    # Apply apps
                     oc apply -f services/apiservice/openshift.yaml
                     oc apply -f services/authservice/openshift.yaml
                     oc apply -f services/userservice/openshift.yaml
                     oc apply -f services/frontend/openshift.yaml
 
-                    # FORCE ROLLOUT (IMPORTANT)
-                    oc rollout restart deployment/apiservice
-                    oc rollout restart deployment/authservice
-                    oc rollout restart deployment/userservice
-                    oc rollout restart deployment/nextgen-ui
-
-                    # Wait for rollout
                     oc rollout status deployment/apiservice --timeout=180s
                     oc rollout status deployment/authservice --timeout=180s
                     oc rollout status deployment/userservice --timeout=180s
