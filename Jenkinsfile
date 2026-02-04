@@ -83,17 +83,26 @@ pipeline {
                     oc login --token=$OCP_TOKEN --server=$OCP_SERVER --insecure-skip-tls-verify=true
                     oc project $OCP_PROJECT
 
+                    # Apply infra
                     oc apply -f services/postgres/
+
+                    # Apply apps
                     oc apply -f services/apiservice/openshift.yaml
                     oc apply -f services/authservice/openshift.yaml
                     oc apply -f services/userservice/openshift.yaml
                     oc apply -f services/frontend/openshift.yaml
 
+                    # FORCE ROLLOUT (IMPORTANT)
+                    oc rollout restart deployment/apiservice
+                    oc rollout restart deployment/authservice
+                    oc rollout restart deployment/userservice
+                    oc rollout restart deployment/nextgen-ui
 
-                    oc rollout status deployment/apiservice --timeout=120s
-                    oc rollout status deployment/authservice --timeout=120s
-                    oc rollout status deployment/userservice --timeout=120s
-                    oc rollout status deployment/nextgen-ui --timeout=120s
+                    # Wait for rollout
+                    oc rollout status deployment/apiservice --timeout=180s
+                    oc rollout status deployment/authservice --timeout=180s
+                    oc rollout status deployment/userservice --timeout=180s
+                    oc rollout status deployment/nextgen-ui --timeout=180s
                     '''
                 }
             }
@@ -109,4 +118,3 @@ pipeline {
         }
     }
 }
-
