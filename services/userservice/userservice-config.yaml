@@ -3,5 +3,4 @@ kind: ConfigMap
 metadata:
   name: userservice-config
 data:
-  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nextgendb
-
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nextgenuser
