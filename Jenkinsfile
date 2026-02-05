@@ -108,6 +108,15 @@ pipeline {
             }
         }
 
+        stage('Prepare Scripts') {
+    steps {
+        sh '''
+        chmod +x scripts/*.sh
+        '''
+    }
+}
+
+
         stage('Deploy to OpenShift') {
             steps {
                 withCredentials([string(
