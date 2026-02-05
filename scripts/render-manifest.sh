@@ -1,8 +1,15 @@
 #!/bin/bash
+# Usage: render-manifest.sh <yaml-file> <image-tag>
+
 set -e
 
-MANIFEST=$1
-IMAGE_TAG=$2
+FILE=$1
+TAG=$2
 
-sed "s|IMAGE_TAG|$IMAGE_TAG|g" "$MANIFEST"
+if [ -z "$FILE" ] || [ -z "$TAG" ]; then
+  echo "Usage: render-manifest.sh <yaml-file> <image-tag>"
+  exit 1
+fi
+
+sed "s|\${IMAGE_TAG}|$TAG|g" "$FILE"
 
