@@ -16,6 +16,7 @@
   <artifactId>authservice</artifactId>
   <version>0.0.1</version>
   <name>authservice</name>
+  <description>Authentication Service</description>
 
   <properties>
     <java.version>17</java.version>
@@ -35,17 +36,31 @@
       <artifactId>jjwt-api</artifactId>
       <version>0.11.5</version>
     </dependency>
+
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-impl</artifactId>
       <version>0.11.5</version>
       <scope>runtime</scope>
     </dependency>
+
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-jackson</artifactId>
       <version>0.11.5</version>
       <scope>runtime</scope>
+    </dependency>
+
+    <!-- Spring Boot Actuator -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!-- Prometheus Micrometer -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
     </dependency>
 
   </dependencies>
@@ -58,6 +73,21 @@
       </plugin>
     </plugins>
   </build>
+
+  <!-- Nexus Artifact Repositories -->
+  <distributionManagement>
+
+    <repository>
+      <id>nexus-releases</id>
+      <url>http://localhost:8081/repository/nextgen-maven-releases/</url>
+    </repository>
+
+    <snapshotRepository>
+      <id>nexus-snapshots</id>
+      <url>http://localhost:8081/repository/nextgen-maven-snapshots/</url>
+    </snapshotRepository>
+
+  </distributionManagement>
 
 </project>
 
